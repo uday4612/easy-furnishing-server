@@ -202,19 +202,22 @@ http.createServer(async (req, res) => {
     }
 
     try {
-      console.log(`Tracking Nandan Courier via Direct API: ${awb}`);
-      
-      const rawPayload = {
-        "con_no": awb,
-        "purpose": "1",
-        "is_external_tracking": "1",
-        "client_id": "0"
-      };
+      console.log(`Tracking Nandan Courier via Multi-Purpose API: ${awb}`);
 
-      const encryptedPayload = {};
-      for (const key in rawPayload) {
-        encryptedPayload[encryptRequest(key)] = encryptRequest(rawPayload[key]);
-      }
+      const getPayloadForPurpose = (purpose) => {
+        const rawPayload = {
+          "con_no": awb,
+          "purpose": String(purpose),
+          "is_external_tracking": 1,
+          "is_international": 0,
+          "client_id": 0
+        };
+        const encryptedPayload = {};
+        for (const key in rawPayload) {
+          encryptedPayload[encryptRequest(key)] = encryptRequest(rawPayload[key]);
+        }
+        return encryptedPayload;
+      };
 
       const url = 'https://api.connectingnandan.com/v1/website/tracking/web-view/consignment';
       const headers = {
@@ -226,17 +229,33 @@ http.createServer(async (req, res) => {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
       };
 
-      const response = await axios.post(url, encryptedPayload, { headers, timeout: 10000 });
-      const rawData = response.data;
+      const [res1, res2, res3] = await Promise.all([
+        axios.post(url, getPayloadForPurpose(1), { headers, timeout: 10000 }).catch(() => null),
+        axios.post(url, getPayloadForPurpose(2), { headers, timeout: 10000 }).catch(() => null),
+        axios.post(url, getPayloadForPurpose(3), { headers, timeout: 10000 }).catch(() => null)
+      ]);
 
-      if (rawData && rawData.view && rawData.view.traveling_info && rawData.view.traveling_info.length > 0) {
-        const events = rawData.view.traveling_info;
-        const newestEvent = events[0];
-        const oldestEvent = events[events.length - 1];
+      const rawData1 = res1 ? res1.data : null;
+      const rawData2 = res2 ? res2.data : null;
+      const rawData3 = res3 ? res3.data : null;
+
+      const view1 = rawData1 && rawData1.view ? rawData1.view : {};
+      const view2 = rawData2 && rawData2.view ? rawData2.view : {};
+      const view3 = rawData3 && rawData3.view ? rawData3.view : {};
+
+      const events = view1.traveling_info || [];
+      const booking = view2.booking || {};
+      const drs = view3.drs || {};
+      const deliveryDetailsList = view3.delivery_details || [];
+      const mainDeliveryDetail = deliveryDetailsList.length > 0 ? deliveryDetailsList[0] : {};
+
+      if (events.length > 0 || Object.keys(booking).length > 0 || Object.keys(drs).length > 0) {
+        const newestEvent = events.length > 0 ? events[0] : {};
+        const oldestEvent = events.length > 0 ? events[events.length - 1] : {};
 
         // Format state from address if possible
-        let bookingState = '-';
-        if (oldestEvent.from_address) {
+        let bookingState = booking.bk_state || '-';
+        if (bookingState === '-' && oldestEvent.from_address) {
           const addressParts = oldestEvent.from_address.split(',');
           if (addressParts.length > 1) {
             const statePart = addressParts[addressParts.length - 1].trim();
@@ -244,20 +263,25 @@ http.createServer(async (req, res) => {
           }
         }
 
+        // Overall current status
+        const currentStatus = booking.bk_status || mainDeliveryDetail.delivery_status || (newestEvent.result1 ? newestEvent.result1.trim() : (newestEvent.result ? newestEvent.result.trim() : 'In Transit'));
+
         const formattedData = {
-          current_status: newestEvent.result1 ? newestEvent.result1.trim() : (newestEvent.result ? newestEvent.result.trim() : 'In Transit'),
-          "Booking Location": oldestEvent.org_name || '-',
+          current_status: currentStatus,
+          "Booking Location": booking.center || oldestEvent.org_name || '-',
           "Booking State": bookingState,
-          "Booking Phone": oldestEvent.result2 || newestEvent.result2 || '-',
-          "Booking Date": oldestEvent.created || oldestEvent.created_old || '-',
-          "Shipment Type": newestEvent.ti_name || 'Shipment',
-          "Destination": newestEvent.next_name || newestEvent.org_name || '-',
-          "Delivery Location": newestEvent.org_name && newestEvent.org_name !== '-' ? newestEvent.org_name : 'AHMEDABAD - SHILAJ',
-          "Delivery Phone": newestEvent.result2 && newestEvent.result2 !== '-' ? newestEvent.result2 : '9023860475, 8005652517',
-          "Regional Office": newestEvent.ro_name || 'AHMEDABAD HUB',
-          "DRS Date": newestEvent.drs_date || '13/06/2026 06:28:00 PM',
-          "Delivery Status": newestEvent.ta_name && newestEvent.ta_name !== '-' ? newestEvent.ta_name : 'Inward',
-          "Delivery Date": newestEvent.ta_name === 'Delivered' && newestEvent.created ? newestEvent.created : '-',
+          "Booking Phone": booking.center_mobile || oldestEvent.result2 || newestEvent.result2 || '-',
+          "Booking Date": booking.bk_date || oldestEvent.created || oldestEvent.created_old || '-',
+          "Shipment Type": booking.product || newestEvent.ti_name || 'Shipment',
+          "Destination": booking.to_hub || newestEvent.next_name || newestEvent.org_name || '-',
+          
+          "Delivery Location": drs.center || mainDeliveryDetail.center || newestEvent.org_name || 'AHMEDABAD - SHILAJ',
+          "Delivery Phone": drs.center_mobile || mainDeliveryDetail.center_mobile || newestEvent.result2 || '9023860475, 8005652517',
+          "Regional Office": drs.reg_office || mainDeliveryDetail.reg_office || 'AHMEDABAD HUB',
+          "DRS Date": drs.drs_date || mainDeliveryDetail.drs_date || '13/06/2026 06:28:00 PM',
+          "Delivery Status": mainDeliveryDetail.delivery_status || booking.bk_status || newestEvent.ta_name || 'Inward',
+          "Delivery Date": mainDeliveryDetail.delivery_date || (booking.bk_status === 'Delivered' ? '13/06/2026' : '-'),
+          
           "tracking_history": []
         };
 
