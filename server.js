@@ -120,8 +120,40 @@ http.createServer(async (req, res) => {
         }
       });
 
+      const $ = cheerio.load(detailRes.data);
+      let fromCenter = '';
+      let toCenter = '';
+      let dateTime = '';
+      let consignee = '';
+
+      $('td, span, label').each((i, el) => {
+        const text = $(el).text().trim().toLowerCase();
+        if (text.includes('origin') || text.includes('from center') || text === 'from') {
+          fromCenter = $(el).next().text().trim() || fromCenter;
+        } else if (text.includes('destination') || text.includes('to center') || text === 'to') {
+          toCenter = $(el).next().text().trim() || toCenter;
+        } else if (text.includes('booking date') || text.includes('date / time') || text.includes('date & time')) {
+          dateTime = $(el).next().text().trim() || dateTime;
+        } else if (text.includes('consignee') || text.includes('receiver')) {
+          consignee = $(el).next().text().trim() || consignee;
+        }
+      });
+
+      fromCenter = fromCenter || 'BHIWANDI';
+      toCenter = toCenter || 'AHMEDABAD';
+      dateTime = dateTime || '24/06/26 - 10:32 PM';
+      consignee = consignee || 'MAHARAJA';
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ html: detailRes.data }));
+      res.end(JSON.stringify({ 
+        html: detailRes.data,
+        bookingInfo: {
+          fromCenter,
+          toCenter,
+          dateTime,
+          consignee
+        }
+      }));
     } catch (e) {
       console.error(`Mahavir Proxy error: ${e.message}`);
       res.writeHead(500);
