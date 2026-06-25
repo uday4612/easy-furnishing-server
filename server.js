@@ -428,6 +428,88 @@ http.createServer(async (req, res) => {
       res.writeHead(500);
       res.end(JSON.stringify({ error: 'Tracking failed. Website might be down or unreachable.' }));
     }
+  } else if (req.url.startsWith('/track-smexpress') && req.method === 'GET') {
+    const urlParams = new URL(req.url, `http://localhost:${PORT}`).searchParams;
+    const awb = urlParams.get('awb');
+
+    if (!awb) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: 'AWB number is required' }));
+      return;
+    }
+
+    try {
+      console.log(`Tracking SM Express AWB: ${awb}`);
+      const browserHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9'
+      };
+
+      const postData = qs.stringify({ 'LRNo': awb });
+      let html = '';
+      let success = false;
+
+      // Try live production site first
+      try {
+        console.log(`Attempting to track on smexpresslogistics.com...`);
+        const response = await axios.post('https://smexpresslogistics.com/order-tracking/', postData, {
+          headers: {
+            ...browserHeaders,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': 'https://smexpresslogistics.com',
+            'Referer': 'https://smexpresslogistics.com/order-tracking/'
+          },
+          timeout: 10000,
+          validateStatus: () => true
+        });
+        
+        if (response.status === 200 && response.data && !response.data.includes('Data Not Found')) {
+          html = response.data;
+          success = true;
+          console.log(`Successfully fetched tracking from smexpresslogistics.com`);
+        }
+      } catch (err) {
+        console.log(`smexpresslogistics.com failed: ${err.message}`);
+      }
+
+      // Staging/Backup site fallback
+      if (!success) {
+        try {
+          console.log(`Attempting fallback to smexpress.in...`);
+          const response = await axios.post('https://smexpress.in/Home/track', postData, {
+            headers: {
+              ...browserHeaders,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Origin': 'https://smexpress.in',
+              'Referer': 'https://smexpress.in/Home/track'
+            },
+            timeout: 10000,
+            validateStatus: () => true
+          });
+          
+          if (response.status === 200 && response.data) {
+            html = response.data;
+            success = true;
+            console.log(`Successfully fetched tracking from smexpress.in`);
+          }
+        } catch (err) {
+          console.log(`smexpress.in fallback failed: ${err.message}`);
+        }
+      }
+
+      if (success) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ html }));
+      } else {
+        res.writeHead(500);
+        res.end(JSON.stringify({ error: 'Failed to connect to SM Express courier services.' }));
+      }
+    } catch (e) {
+      console.error(`SM Express Proxy error: ${e.message}`);
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: 'Failed to connect to SM Express courier service.' }));
+    }
   } else {
     res.writeHead(404);
     res.end('Not Found');
