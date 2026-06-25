@@ -256,8 +256,8 @@ http.createServer(async (req, res) => {
           "Delivery Phone": newestEvent.result2 && newestEvent.result2 !== '-' ? newestEvent.result2 : '9023860475, 8005652517',
           "Regional Office": newestEvent.ro_name || 'AHMEDABAD HUB',
           "DRS Date": newestEvent.drs_date || '13/06/2026 06:28:00 PM',
-          "Delivery Status": newestEvent.ta_name && newestEvent.ta_name !== '-' ? newestEvent.ta_name : 'Delivered',
-          "Delivery Date": newestEvent.ta_name === 'Delivered' && newestEvent.created ? newestEvent.created : '13/06/2026',
+          "Delivery Status": newestEvent.ta_name && newestEvent.ta_name !== '-' ? newestEvent.ta_name : 'Inward',
+          "Delivery Date": newestEvent.ta_name === 'Delivered' && newestEvent.created ? newestEvent.created : '-',
           "tracking_history": []
         };
 
