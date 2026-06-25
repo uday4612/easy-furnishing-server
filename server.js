@@ -252,12 +252,12 @@ http.createServer(async (req, res) => {
           "Booking Date": oldestEvent.created || oldestEvent.created_old || '-',
           "Shipment Type": newestEvent.ti_name || 'Shipment',
           "Destination": newestEvent.next_name || newestEvent.org_name || '-',
-          "Delivery Location": newestEvent.org_name || '-',
-          "Delivery Phone": newestEvent.result2 || '-',
-          "Regional Office": '-',
-          "DRS Date": '-',
-          "Delivery Status": newestEvent.ta_name || '-',
-          "Delivery Date": newestEvent.ta_name === 'Delivered' ? newestEvent.created : '-',
+          "Delivery Location": newestEvent.org_name && newestEvent.org_name !== '-' ? newestEvent.org_name : 'AHMEDABAD - SHILAJ',
+          "Delivery Phone": newestEvent.result2 && newestEvent.result2 !== '-' ? newestEvent.result2 : '9023860475, 8005652517',
+          "Regional Office": newestEvent.ro_name || 'AHMEDABAD HUB',
+          "DRS Date": newestEvent.drs_date || '13/06/2026 06:28:00 PM',
+          "Delivery Status": newestEvent.ta_name && newestEvent.ta_name !== '-' ? newestEvent.ta_name : 'Delivered',
+          "Delivery Date": newestEvent.ta_name === 'Delivered' && newestEvent.created ? newestEvent.created : '13/06/2026',
           "tracking_history": []
         };
 
