@@ -450,27 +450,69 @@ http.createServer(async (req, res) => {
       let html = '';
       let success = false;
 
-      // Try live production site first
+      // Try live direct tracking engine first (YANA portal on port 443)
       try {
-        console.log(`Attempting to track on smexpresslogistics.com...`);
-        const response = await axios.post('https://smexpresslogistics.com/order-tracking/', postData, {
-          headers: {
-            ...browserHeaders,
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Origin': 'https://smexpresslogistics.com',
-            'Referer': 'https://smexpresslogistics.com/order-tracking/'
-          },
+        console.log(`Attempting to track on yana.smexpresslogistics.com...`);
+        const targetUrl = `https://yana.smexpresslogistics.com/IYANA/webTrackYourConsignmentAction.do?reqCode=showTrackYourCosignmentPage&searchType=AWBNO&searchValue=${awb}`;
+        const response = await axios.get(targetUrl, {
+          headers: browserHeaders,
           timeout: 10000,
           validateStatus: () => true
         });
         
-        if (response.status === 200 && response.data && !response.data.includes('Data Not Found')) {
+        if (response.status === 200 && response.data && (response.data.includes('Status') || response.data.includes('DELIVERED') || response.data.includes('BOOKED') || response.data.includes('list'))) {
           html = response.data;
           success = true;
-          console.log(`Successfully fetched tracking from smexpresslogistics.com`);
+          console.log(`Successfully fetched tracking from yana.smexpresslogistics.com`);
         }
       } catch (err) {
-        console.log(`smexpresslogistics.com failed: ${err.message}`);
+        console.log(`yana.smexpresslogistics.com failed: ${err.message}`);
+      }
+
+      // Try live production site second using the direct GET tracking-result URL
+      if (!success) {
+        try {
+          console.log(`Attempting to track on smexpresslogistics.com/tracking-result/...`);
+          const targetUrl = `https://smexpresslogistics.com/tracking-result/?reqCode=showTrackYourCosignmentPage&searchType=AWBNO&searchValue=${awb}`;
+          const response = await axios.get(targetUrl, {
+            headers: browserHeaders,
+            timeout: 10000,
+            validateStatus: () => true
+          });
+          
+          if (response.status === 200 && response.data && !response.data.includes('Data Not Found')) {
+            html = response.data;
+            success = true;
+            console.log(`Successfully fetched tracking from smexpresslogistics.com/tracking-result/`);
+          }
+        } catch (err) {
+          console.log(`smexpresslogistics.com/tracking-result/ failed: ${err.message}`);
+        }
+      }
+
+      // Try live production site second (POST fallback)
+      if (!success) {
+        try {
+          console.log(`Attempting to track on smexpresslogistics.com...`);
+          const response = await axios.post('https://smexpresslogistics.com/order-tracking/', postData, {
+            headers: {
+              ...browserHeaders,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Origin': 'https://smexpresslogistics.com',
+              'Referer': 'https://smexpresslogistics.com/order-tracking/'
+            },
+            timeout: 10000,
+            validateStatus: () => true
+          });
+          
+          if (response.status === 200 && response.data && !response.data.includes('Data Not Found')) {
+            html = response.data;
+            success = true;
+            console.log(`Successfully fetched tracking from smexpresslogistics.com`);
+          }
+        } catch (err) {
+          console.log(`smexpresslogistics.com failed: ${err.message}`);
+        }
       }
 
       // Staging/Backup site fallback
